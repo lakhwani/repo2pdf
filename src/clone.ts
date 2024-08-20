@@ -95,6 +95,7 @@ async function main(
   outputFileName: fs.PathLike,
   outputFolderName: string,
   keepRepo: boolean,
+  specificFolder: string
 ) {
   const gitP = git();
   let tempDir = "./tempRepo";
@@ -126,44 +127,42 @@ async function main(
 
     spinner.start(chalk.blueBright("Processing files..."));
     ignoreConfig = await loadIgnoreConfig(tempDir);
-    await appendFilesToPdf(tempDir, removeComments);
+    await appendFilesToPdf(tempDir, removeComments, true, specificFolder);
 
-    if (!onePdfPerFile) {
-      if (doc) {
-        const pages = doc.bufferedPageRange();
-        for (let i = 0; i < pages.count; i++) {
-          doc.switchToPage(i);
-          if (addPageNumbers) {
-            const oldBottomMargin = doc.page.margins.bottom;
-            doc.page.margins.bottom = 0;
-            doc.text(
-              `Page: ${i + 1} of ${pages.count}`,
-              0,
-              doc.page.height - oldBottomMargin / 2,
-              {
-                align: "center",
-              },
-            );
-            doc.page.margins.bottom = oldBottomMargin;
-          }
+    if (!onePdfPerFile && doc) {
+      const pages = doc.bufferedPageRange();
+      for (let i = 0; i < pages.count; i++) {
+        doc.switchToPage(i);
+        if (addPageNumbers) {
+          const oldBottomMargin = doc.page.margins.bottom;
+          doc.page.margins.bottom = 0;
+          doc.text(
+            `Page: ${i + 1} of ${pages.count}`,
+            0,
+            doc.page.height - oldBottomMargin / 2,
+            {
+              align: "center",
+            }
+          );
+          doc.page.margins.bottom = oldBottomMargin;
         }
-        doc.end();
       }
+      doc.end();
     }
 
     spinner.succeed(
       chalk.greenBright(
         `${
           onePdfPerFile ? "PDFs" : "PDF"
-        } created with ${fileCount} files processed.`,
-      ),
+        } created with ${fileCount} files processed.`
+      )
     );
 
     if (!keepRepo && !useLocalRepo) {
       await delay(3000);
       fs.rmSync(tempDir, { recursive: true, force: true });
       spinner.succeed(
-        chalk.greenBright("Temporary repository has been deleted."),
+        chalk.greenBright("Temporary repository has been deleted.")
       );
     }
   } catch (err) {
@@ -171,136 +170,179 @@ async function main(
     console.error(err);
   }
 
-  async function appendFilesToPdf(directory: string, removeComments = false) {
+  async function appendFilesToPdf(
+    directory: string,
+    removeComments = false,
+    isRoot = true,
+    specificFolder = ""
+  ) {
     const files = await fsPromises.readdir(directory);
 
     for (const file of files) {
-      const filePath = path.join(directory, file);
-      const stat = await fsPromises.stat(filePath);
+      try {
+        const filePath = path.join(directory, file);
+        const stat = await fsPromises.stat(filePath);
+        const relativePath = path.relative(tempDir, filePath);
 
-      const excludedNames = universalExcludedNames;
-      const excludedExtensions = universalExcludedExtensions;
-
-      if (ignoreConfig?.ignoredFiles)
-        excludedNames.push(...ignoreConfig.ignoredFiles);
-      if (ignoreConfig?.ignoredExtensions)
-        excludedExtensions.push(...ignoreConfig.ignoredExtensions);
-
-      // Check if file or directory should be excluded
-      if (
-        excludedNames.includes(path.basename(filePath)) ||
-        excludedExtensions.includes(path.extname(filePath))
-      ) {
-        continue;
-      }
-
-      if (stat.isFile()) {
-        fileCount++;
-        spinner.text = chalk.blueBright(
-          `Processing files... (${fileCount} processed)`,
-        );
-        const fileName = path.relative(tempDir, filePath);
-
-        if (onePdfPerFile) {
-          doc = new PDFDocument({
-            bufferPages: true,
-            autoFirstPage: false,
-          });
-
-          const pdfFileName = path
-            .join(outputFolderName, fileName.replace(path.sep, "_"))
-            .concat(".pdf");
-
-          await fsPromises.mkdir(path.dirname(pdfFileName), {
-            recursive: true,
-          });
-          doc.pipe(fs.createWriteStream(pdfFileName));
-          doc.addPage();
+        // Determine if we should process this file/directory
+        let shouldProcess = isRoot;
+        if (specificFolder) {
+          if (isRoot && file === specificFolder) {
+            shouldProcess = true;
+          } else if (relativePath.startsWith(specificFolder)) {
+            shouldProcess = true;
+          } else {
+            shouldProcess = false;
+          }
         }
 
-        if (doc) {
-          if (isBinaryFileSync(filePath)) {
-            const data = fs.readFileSync(filePath).toString("base64");
-            if (fileCount > 1) doc.addPage();
+        if (!shouldProcess) {
+          continue;
+        }
+
+        const excludedNames = universalExcludedNames;
+        const excludedExtensions = universalExcludedExtensions;
+
+        if (ignoreConfig?.ignoredFiles)
+          excludedNames.push(...ignoreConfig.ignoredFiles);
+        if (ignoreConfig?.ignoredExtensions)
+          excludedExtensions.push(...ignoreConfig.ignoredExtensions);
+
+        // Check if file or directory should be excluded
+        if (
+          excludedNames.includes(path.basename(filePath)) ||
+          excludedExtensions.includes(path.extname(filePath))
+        ) {
+          continue;
+        }
+
+        if (stat.isFile()) {
+          fileCount++;
+          spinner.text = chalk.blueBright(
+            `Processing files... (${fileCount} processed)`
+          );
+
+          if (onePdfPerFile) {
+            doc = new PDFDocument({
+              bufferPages: true,
+              autoFirstPage: false,
+            });
+            const pdfFileName = path
+              .join(outputFolderName, relativePath.replace(path.sep, "_"))
+              .concat(".pdf");
+            await fsPromises.mkdir(path.dirname(pdfFileName), {
+              recursive: true,
+            });
+            doc.pipe(fs.createWriteStream(pdfFileName));
+            doc.addPage();
+          }
+
+          if (doc) {
+            // Add the filename and path header before the file contents
             doc
-              .font("Courier")
-              .fontSize(10)
-              .text(`${fileName}\n\nBASE64:\n\n${data}`, { lineGap: 4 });
-          } else {
-            let data = await fsPromises.readFile(filePath, "utf8");
-            // Determine parser and format with Prettier if supported
-            const extension = path.extname(filePath).slice(1);
-            const parser = getPrettierParser(extension);
+              .font("Courier-Bold")
+              .fontSize(11)
+              .text(`\n Here is ${relativePath}:`, { lineGap: 4 })
+              .moveDown();
 
-            if (parser) {
-              try {
-                data = await prettier.format(data, { parser });
-              } catch (error: unknown) {
-                const errorMessage = (error as Error).message.split("\n")[0];
-                console.warn(
-                  `Plain text fallback at ${filePath}: ${errorMessage}`,
-                );
+            if (isBinaryFileSync(filePath)) {
+              const data = fs.readFileSync(filePath).toString("base64");
+              if (fileCount > 1) doc.addPage();
+              doc
+                .font("Courier")
+                .fontSize(10)
+                .text(`${relativePath}\n\nBASE64:\n\n${data}`, { lineGap: 4 });
+            } else {
+              let data = await fsPromises.readFile(filePath, "utf8");
+
+              // Truncate data if it's too long
+              if (data.length > 1000000) {
+                data =
+                  data.slice(0, 1000000) +
+                  "\n... (content truncated due to size)";
               }
-            }
 
-            data = data.replace(/\t/g, "    ");
-            data = data.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+              const extension = path.extname(filePath).slice(1);
+              const parser = getPrettierParser(extension);
 
-            if (removeComments) {
-              data = strip(data);
-            }
+              if (parser) {
+                try {
+                  data = await prettier.format(data, { parser });
+                } catch (error: unknown) {
+                  const errorMessage = (error as Error).message.split("\n")[0];
+                  console.warn(
+                    `Plain text fallback at ${filePath}: ${errorMessage}`
+                  );
+                }
+              }
 
-            if (removeEmptyLines) {
-              data = data.replace(/^\s*[\r\n]/gm, "");
-            }
+              data = data.replace(/\t/g, "    ");
+              data = data.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-            let highlightedCode;
-            try {
-              if (addHighlighting && hljs.getLanguage(extension)) {
-                highlightedCode = hljs.highlight(data, {
-                  language: extension,
-                }).value;
-              } else {
+              if (removeComments) {
+                data = strip(data);
+              }
+
+              if (removeEmptyLines) {
+                data = data.replace(/^\s*[\r\n]/gm, "");
+              }
+
+              let highlightedCode;
+              try {
+                if (addHighlighting && hljs.getLanguage(extension)) {
+                  highlightedCode = hljs.highlight(data, {
+                    language: extension,
+                  }).value;
+                } else {
+                  highlightedCode = hljs.highlight(data, {
+                    language: "plaintext",
+                  }).value;
+                }
+              } catch (error) {
                 highlightedCode = hljs.highlight(data, {
                   language: "plaintext",
                 }).value;
               }
-            } catch (error) {
-              highlightedCode = hljs.highlight(data, {
-                language: "plaintext",
-              }).value;
+
+              const hlData = htmlToJson(highlightedCode, removeEmptyLines);
+              let lineNum = 1;
+              const lineNumWidth = hlData
+                .filter((d) => d.text === "\n")
+                .length.toString().length;
+
+              for (let i = 0; i < hlData.length; i++) {
+                const { text, color } = hlData[i];
+                if (i === 0 || hlData[i - 1]?.text === "\n")
+                  if (addLineNumbers) {
+                    doc.text(
+                      String(lineNum++).padStart(lineNumWidth, " ") + " ",
+                      {
+                        continued: true,
+                        textIndent: 0,
+                      }
+                    );
+                  }
+                doc.fillColor(color || "black");
+
+                if (text !== "\n") doc.text(text, { continued: true });
+                else doc.text(text);
+              }
             }
-
-            const hlData = htmlToJson(highlightedCode, removeEmptyLines);
-            let lineNum = 1;
-            const lineNumWidth = hlData
-              .filter((d) => d.text === "\n")
-              .length.toString().length;
-            for (let i = 0; i < hlData.length; i++) {
-              const { text, color } = hlData[i];
-              if (i === 0 || hlData[i - 1]?.text === "\n")
-                if (addLineNumbers) {
-                  doc.text(
-                    String(lineNum++).padStart(lineNumWidth, " ") + " ",
-                    {
-                      continued: true,
-                      textIndent: 0,
-                    },
-                  );
-                }
-              doc.fillColor(color || "black");
-
-              if (text !== "\n") doc.text(text, { continued: true });
-              else doc.text(text);
+            if (onePdfPerFile) {
+              doc?.end();
             }
           }
+        } else if (stat.isDirectory()) {
+          await appendFilesToPdf(
+            filePath,
+            removeComments,
+            false,
+            specificFolder
+          );
         }
-
-        if (onePdfPerFile) {
-          doc?.end();
-        }
-      } else if (stat.isDirectory()) {
-        await appendFilesToPdf(filePath, removeComments);
+      } catch (error) {
+        console.error(`Error processing ${file}: ${error}`);
+        spinner.warn(chalk.yellow(`Skipped ${file} due to an error`));
       }
     }
   }
@@ -308,7 +350,7 @@ async function main(
   if (!onePdfPerFile) {
     doc?.on("finish", () => {
       spinner.succeed(
-        chalk.greenBright(`PDF created with ${fileCount} files processed.`),
+        chalk.greenBright(`PDF created with ${fileCount} files processed.`)
       );
     });
   }

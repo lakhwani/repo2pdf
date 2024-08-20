@@ -2,7 +2,7 @@ import { decode } from "html-entities";
 
 export function htmlToJson(
   htmlCode: string,
-  removeEmptyLines: boolean,
+  removeEmptyLines: boolean
 ): { text: string; color?: string }[] {
   const data: { text: string; color?: string }[] = [];
   const colorMap = new Map<string, string>([

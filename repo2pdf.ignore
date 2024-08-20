@@ -1,4 +1,4 @@
 {
-    "ignoredFiles": ["tsconfig.json", "dist", "node_modules"],
-    "ignoredExtensions": [".raw"]
+  "ignoredFiles": ["tsconfig.json", "dist", "node_modules", ".next", ".git", ".DS_Store", ".devcontainer", ".github", "LICENSE.txt", "Dockerfile.multi", "package-lock.json", "packages.json", "bun.lockb", "images", "data-node", "logs", "packages", "localization", ".env", "public", "babel.config.cjs"],
+  "ignoredExtensions": [".raw", ".env", ".eslintrc.json", ".eslintrc.js", ".dockerignore"]
 }

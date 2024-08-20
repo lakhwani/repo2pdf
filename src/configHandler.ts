@@ -22,7 +22,7 @@ type QuestionType = {
 export async function configQuestions(
   main: Function,
   chalk: typeof chalkType,
-  inquirer: typeof inquirerType,
+  inquirer: typeof inquirerType
 ) {
   const questions: QuestionType[] = [
     {
@@ -56,7 +56,7 @@ export async function configQuestions(
       },
       validate: function (value: string) {
         var pass = value.match(
-          /^https:\/\/github.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/,
+          /^https:\/\/github.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
         );
         if (pass) {
           return true;
@@ -105,6 +105,13 @@ export async function configQuestions(
         return val.toLowerCase() === "yes";
       },
     },
+    {
+      name: "specificFolder",
+      message: "Specify a folder to convert (leave empty for root only):",
+      when(answers: { localRepo: boolean }) {
+        return answers.localRepo || !answers.localRepo;
+      },
+    },
   ];
 
   console.log(
@@ -117,7 +124,7 @@ export async function configQuestions(
   ╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝         ╚══════╝        ╚═╝     ╚═════╝ ╚═╝
 
   Welcome to Repo-to-PDF! Let's get started...
-  `),
+  `)
   );
 
   const answers = await inquirer.prompt(questions);
@@ -145,5 +152,6 @@ export async function configQuestions(
     outputFileName,
     outputFolderName,
     keepRepo,
+    answers.specificFolder
   );
 }
