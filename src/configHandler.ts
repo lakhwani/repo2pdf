@@ -22,7 +22,7 @@ type QuestionType = {
 export async function configQuestions(
   main: Function,
   chalk: typeof chalkType,
-  inquirer: typeof inquirerType,
+  inquirer: typeof inquirerType
 ) {
   const questions: QuestionType[] = [
     {
@@ -56,7 +56,7 @@ export async function configQuestions(
       },
       validate: function (value: string) {
         var pass = value.match(
-          /^https:\/\/github.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/,
+          /^https:\/\/github.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
         );
         if (pass) {
           return true;
@@ -75,6 +75,7 @@ export async function configQuestions(
         "Remove comments",
         "Remove empty lines",
         "One PDF per file",
+        "Add file names as a title",
       ],
     },
     {
@@ -117,7 +118,7 @@ export async function configQuestions(
   ╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝         ╚══════╝        ╚═╝     ╚═════╝ ╚═╝
 
   Welcome to Repo-to-PDF! Let's get started...
-  `),
+  `)
   );
 
   const answers = await inquirer.prompt(questions);
@@ -142,8 +143,9 @@ export async function configQuestions(
     features.includes("Remove comments"),
     features.includes("Remove empty lines"),
     features.includes("One PDF per file"),
+    features.includes("Add file names as a title"),
     outputFileName,
     outputFolderName,
-    keepRepo,
+    keepRepo
   );
 }

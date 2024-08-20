@@ -92,9 +92,10 @@ async function main(
   removeComments: boolean,
   removeEmptyLines: boolean,
   onePdfPerFile: boolean,
+  addFileNamesAsTitle: boolean,
   outputFileName: fs.PathLike,
   outputFolderName: string,
-  keepRepo: boolean,
+  keepRepo: boolean
 ) {
   const gitP = git();
   let tempDir = "./tempRepo";
@@ -142,7 +143,7 @@ async function main(
               doc.page.height - oldBottomMargin / 2,
               {
                 align: "center",
-              },
+              }
             );
             doc.page.margins.bottom = oldBottomMargin;
           }
@@ -155,15 +156,15 @@ async function main(
       chalk.greenBright(
         `${
           onePdfPerFile ? "PDFs" : "PDF"
-        } created with ${fileCount} files processed.`,
-      ),
+        } created with ${fileCount} files processed.`
+      )
     );
 
     if (!keepRepo && !useLocalRepo) {
       await delay(3000);
       fs.rmSync(tempDir, { recursive: true, force: true });
       spinner.succeed(
-        chalk.greenBright("Temporary repository has been deleted."),
+        chalk.greenBright("Temporary repository has been deleted.")
       );
     }
   } catch (err) {
@@ -197,7 +198,7 @@ async function main(
       if (stat.isFile()) {
         fileCount++;
         spinner.text = chalk.blueBright(
-          `Processing files... (${fileCount} processed)`,
+          `Processing files... (${fileCount} processed)`
         );
         const fileName = path.relative(tempDir, filePath);
 
@@ -219,6 +220,14 @@ async function main(
         }
 
         if (doc) {
+          if (addFileNamesAsTitle) {
+            doc
+              .font("Helvetica-Bold")
+              .fontSize(13)
+              .text(`\nHere is ${fileName}:`)
+              .moveDown();
+            doc.font("Courier").fontSize(11);
+          }
           if (isBinaryFileSync(filePath)) {
             const data = fs.readFileSync(filePath).toString("base64");
             if (fileCount > 1) doc.addPage();
@@ -238,7 +247,7 @@ async function main(
               } catch (error: unknown) {
                 const errorMessage = (error as Error).message.split("\n")[0];
                 console.warn(
-                  `Plain text fallback at ${filePath}: ${errorMessage}`,
+                  `Plain text fallback at ${filePath}: ${errorMessage}`
                 );
               }
             }
@@ -285,7 +294,7 @@ async function main(
                     {
                       continued: true,
                       textIndent: 0,
-                    },
+                    }
                   );
                 }
               doc.fillColor(color || "black");
@@ -308,7 +317,7 @@ async function main(
   if (!onePdfPerFile) {
     doc?.on("finish", () => {
       spinner.succeed(
-        chalk.greenBright(`PDF created with ${fileCount} files processed.`),
+        chalk.greenBright(`PDF created with ${fileCount} files processed.`)
       );
     });
   }
